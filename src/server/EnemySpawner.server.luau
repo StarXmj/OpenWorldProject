@@ -1,33 +1,36 @@
---[ Générateur de PNJ (Adapté au Terrain Procédural) ]--
+--[ Générateur de PNJ sécurisé ]--
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local NPCBrain = require(script.Parent:WaitForChild("NPCBrain"))
 local prefab = ReplicatedStorage:WaitForChild("EnemyPrefab")
 
--- On attend que le terrain ET la nature soient générés
-task.wait(5)
+-- 🛡️ SÉCURITÉ 1 : On attend impérativement que le monde soit fini
+print("⏳ Les PNJ attendent la fin de la génération du monde...")
+repeat 
+    task.wait(0.5) 
+until workspace:GetAttribute("WorldGenerated") == true
+print("🚀 Le monde est prêt ! Scan des positions des PNJ...")
 
--- On paramètre notre laser pour qu'il détecte bien l'eau (pour éviter de les faire spawn sous l'eau)
+-- Le laser ne ciblera que le vrai Terrain
 local raycastParams = RaycastParams.new()
-raycastParams.IgnoreWater = false
+raycastParams.FilterType = Enum.RaycastFilterType.Include
+raycastParams.FilterDescendantsInstances = {workspace.Terrain}
 
 local function spawnNPC()
-    -- Le script va faire jusqu'à 10 tentatives pour trouver un sol valide
+    -- 10 tentatives pour trouver un sol sec (hors de l'eau)
     for attempt = 1, 10 do
-        local randomX = math.random(-200, 200)
-        local randomZ = math.random(-200, 200)
+        local randomX = math.random(-250, 250)
+        local randomZ = math.random(-250, 250)
         
         local origin = Vector3.new(randomX, 150, randomZ)
         local result = workspace:Raycast(origin, Vector3.new(0, -200, 0), raycastParams)
         
-        -- Si on a touché le sol ET que ce n'est PAS de l'eau
         if result and result.Material ~= Enum.Material.Water then
-            
             local npc = prefab:Clone()
             npc.Name = "Vagabond"
             
-            -- On le place exactement à la position touchée par le laser, + 3 en hauteur pour ses jambes
-            npc:PivotTo(CFrame.new(result.Position + Vector3.new(0, 3, 0)))
+            -- 🛡️ SÉCURITÉ 2 : On les spawn 10 studs AU-DESSUS du sol pour qu'ils tombent proprement
+            npc:PivotTo(CFrame.new(result.Position + Vector3.new(0, 10, 0)))
             
             for _, part in ipairs(npc:GetDescendants()) do
                 if part:IsA("BasePart") then part.Anchored = false end
@@ -38,9 +41,9 @@ local function spawnNPC()
             if not root or not humanoid then return end
 
             npc.Parent = workspace
-            root:SetNetworkOwner(nil)
+            root:SetNetworkOwner(nil) -- Garde le contrôle physique sur le serveur
 
-            -- Interface
+            -- Interface Vie
             local healthGui = Instance.new("BillboardGui")
             healthGui.Size = UDim2.new(0, 100, 0, 20)
             healthGui.StudsOffset = Vector3.new(0, 3, 0)
@@ -61,6 +64,7 @@ local function spawnNPC()
                 if health <= 0 then npc:Destroy() end
             end)
 
+            -- Interface Bulles de pensée
             local thoughtGui = Instance.new("BillboardGui")
             thoughtGui.Name = "ThoughtGui"
             thoughtGui.Size = UDim2.new(0, 120, 0, 30)
@@ -83,15 +87,25 @@ local function spawnNPC()
             corner.Parent = thoughtText
             thoughtText.Parent = thoughtGui
 
+            -- Connexion de l'IA
             NPCBrain.Attach(npc)
-            
-            -- Dès qu'un vagabond a bien été placé, on stoppe les tentatives de cette boucle
+            print("✅ Vagabond apparu avec succès aux coordonnées :", randomX, randomZ)
             return 
         end
     end
+    
+    -- Sécurité ultime : Si après 10 essais le laser n'a trouvé que de l'eau, on le force à spawn au centre de la map (0, 30, 0) pour ne pas perdre un PNJ
+    warn("⚠️ Impossible de trouver un sol sec pour ce PNJ. Spawn de secours appliqué.")
+    local fallbackNpc = prefab:Clone()
+    fallbackNpc.Name = "Vagabond"
+    fallbackNpc:PivotTo(CFrame.new(0, 30, 0))
+    for _, part in ipairs(fallbackNpc:GetDescendants()) do if part:IsA("BasePart") then part.Anchored = false end end
+    fallbackNpc.Parent = workspace
+    fallbackNpc.HumanoidRootPart:SetNetworkOwner(nil)
+    NPCBrain.Attach(fallbackNpc)
 end
 
--- On génère nos 4 vagabonds
+-- On lance l'apparition de nos 4 vagabonds
 for i = 1, 4 do
     spawnNPC()
 end

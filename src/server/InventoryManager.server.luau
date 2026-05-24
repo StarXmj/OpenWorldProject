@@ -32,12 +32,19 @@ Players.PlayerRemoving:Connect(function(player)
     playerInventories[player] = nil -- On nettoie la mémoire quand il quitte
 end)
 
+
 -- 3. AJOUTER UN OBJET (Appelé par le monde)
 giveItemEvent.Event:Connect(function(player, itemID, amount)
     local inv = playerInventories[player]
     if inv then
         inv[itemID] = (inv[itemID] or 0) + amount
-        -- On prévient le client que son inventaire a changé
+        
+        -- 🌟 GAIN D'XP : Ramasser et porter des choses augmente la Force !
+        local addXpEvent = ReplicatedStorage:FindFirstChild("AddXPEvent")
+        if addXpEvent and player.Character then
+            addXpEvent:Fire(player.Character, "Strength", 10 * amount)
+        end
+        
         updateEvent:FireClient(player, inv)
     end
 end)

@@ -25,12 +25,12 @@ local GameConfig = {
 
     Combat = {
         BaseDamage = 15, AttackRange = 6, Cooldown = 0.6,     
-        PunchAnimId = "rbxassetid://507771019", 
+        PunchAnimId = "rbxassetid://119824661728215", 
     },
 
     NPC = {
         WalkAnimId = "rbxassetid://507777826", 
-        GrabAnimId = "rbxassetid://507770239", 
+        GrabAnimId = "rbxassetid://97106070783144", 
     },
 
     -- CONFIGURATION DE LA GÉNÉRATION (Réglages de 0 à 1)

@@ -12,6 +12,7 @@ local noiseScale = 80
 local amplitude = 40
 local waterLevel = 15
 
+local bushes = {}
 local waterWaypoints = Instance.new("Folder")
 waterWaypoints.Name = "WaterWaypoints"
 waterWaypoints.Parent = workspace
@@ -36,7 +37,6 @@ for x = -mapSize/2, mapSize/2, blockSize do
         if height < waterLevel then
             Terrain:FillBlock(CFrame.new(x, height + ((waterLevel - height) / 2), z), Vector3.new(blockSize, waterLevel - height, blockSize), Enum.Material.Water)
             
-            -- Points d'eau invisibles pour guider les PNJ sans alourdir le serveur
             if math.random(1, 40) == 1 then
                 local wp = Instance.new("Part")
                 wp.Name = "WaterWaypoint"
@@ -53,11 +53,9 @@ for x = -mapSize/2, mapSize/2, blockSize do
     end
 end
 
--- Fonction pour savoir combien de baies poser sur un buisson selon tes probabilités
 local function rollBerryQuantity()
-    local roll = math.random() -- Entre 0 et 1
+    local roll = math.random()
     local chances = GameConfig.Generation.BerryQuantityChances
-    
     if roll <= chances.Four then return 4
     elseif roll <= chances.Three then return 3
     elseif roll <= chances.Two then return 2
@@ -66,8 +64,11 @@ end
 
 -- PARTIE B : ARBRES ET BUISSONS AVEC BAIES VISIBLES
 task.wait(1)
+
+-- 🛡️ CORRECTION : Le laser ne percutera QUE le Terrain naturel (ignore les feuilles d'arbres)
 local rayParams = RaycastParams.new()
-rayParams.IgnoreWater = false
+rayParams.FilterType = Enum.RaycastFilterType.Include
+rayParams.FilterDescendantsInstances = {Terrain}
 
 for x = -mapSize/2, mapSize/2, 15 do
     for z = -mapSize/2, mapSize/2, 15 do
@@ -77,7 +78,6 @@ for x = -mapSize/2, mapSize/2, 15 do
             local roll = math.random()
             
             if roll <= GameConfig.Generation.TreeChance then
-                -- Création Arbre
                 local trunk = Instance.new("Part")
                 trunk.Name = "TreeTrunk"
                 trunk.Size = Vector3.new(3, 15, 3)
@@ -97,29 +97,26 @@ for x = -mapSize/2, mapSize/2, 15 do
                 leaves.Parent = workspace
                 
             elseif roll <= (GameConfig.Generation.TreeChance + GameConfig.Generation.BerryBushChance) then
-                -- Création Buisson
                 local bush = Instance.new("Part")
                 bush.Name = "BerryBush"
                 bush.Size = Vector3.new(4, 3, 4)
-                bush.Position = result.Position + Vector3.new(0, 1.5, 0)
+                -- 🛡️ CORRECTION : On l'enfonce légèrement dans le sol pour épouser les pentes
+                bush.Position = result.Position + Vector3.new(0, 0.8, 0) 
                 bush.Color = Color3.fromRGB(20, 85, 20)
                 bush.Material = Enum.Material.Grass
                 bush.Shape = Enum.PartType.Ball
                 bush.Anchored = true
                 bush.Parent = workspace
                 
-                -- GÉNÉRATION DES BAIES VISIBLES SUR LE BUISSON
                 local berryCount = rollBerryQuantity()
                 for i = 1, berryCount do
                     local berry = Instance.new("Part")
                     berry.Name = "BerryDrop"
                     berry.Size = Vector3.new(0.7, 0.7, 0.7)
-                    berry.Color = Color3.fromRGB(180, 10, 50) -- Rouge Baie
+                    berry.Color = Color3.fromRGB(180, 10, 50)
                     berry.Shape = Enum.PartType.Ball
-                    berry.Anchored = true -- Fixées sur le buisson
+                    berry.Anchored = true 
                     berry.CanCollide = false
-                    
-                    -- On les éparpille légèrement autour du centre du buisson pour qu'elles soient visibles
                     berry.Position = bush.Position + Vector3.new(math.random(-15, 15)/10, math.random(0, 10)/10, math.random(-15, 15)/10)
                     berry.Parent = workspace
                     
@@ -144,3 +141,6 @@ for x = -mapSize/2, mapSize/2, 15 do
 end
 
 print("✅ Monde et flore générés avec succès !")
+
+-- 🛡️ LA SÉCURITÉ : On active l'attribut pour dire aux PNJ "C'est bon, le monde existe !"
+workspace:SetAttribute("WorldGenerated", true)
