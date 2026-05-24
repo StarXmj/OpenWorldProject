@@ -1,0 +1,7 @@
+# Fichiers de sauvegarde Roblox Studio
+*.rbxl
+*.rbxlx
+
+# Fichiers système
+.DS_Store
+Thumbs.db
