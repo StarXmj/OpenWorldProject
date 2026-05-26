@@ -114,7 +114,7 @@ inventoryPanel.Parent = mainMenu
 
 local invGrid = Instance.new("UIGridLayout")
 invGrid.CellSize = UDim2.new(0, 190, 0, 45)
-invGrid.Padding = UDim2.new(0, 15, 0, 10)
+invGrid.CellPadding = UDim2.new(0, 15, 0, 10)
 invGrid.HorizontalAlignment = Enum.HorizontalAlignment.Center
 invGrid.Parent = inventoryPanel
 

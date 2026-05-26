@@ -7,7 +7,7 @@ local GameConfig = {
     Entity = {
         MaxHealth = 100, WalkSpeed = 14, SprintSpeed = 22,
         MaxHunger = 100, MaxStamina = 100, MaxThirst = 100,
-        StaminaDrain = 15, StaminaRegen = 10,
+        StaminaDrain = 15, StaminaRegen = 10,MaxFatigue = 100
     },
 
     Survival = { 
@@ -23,8 +23,13 @@ local GameConfig = {
         ["Berry"] = { Name = "Baie Sauvage", Type = "Consumable", RestoreValue = 20 }
     },
 
-    Combat = {
-        BaseDamage = 15, AttackRange = 6, Cooldown = 0.6,     
+ Combat = {
+        BaseDamage = 15, 
+        AttackRange = 6,     -- 🛡️ CORRECTION : Le paramètre manquant !
+        Cooldown = 0.8, 
+        WindUpTime = 0.25, 
+        HitboxSize = Vector3.new(5, 5, 5), 
+        HitboxOffset = CFrame.new(0, 0, -3), 
         PunchAnimId = "rbxassetid://119824661728215", 
     },
 

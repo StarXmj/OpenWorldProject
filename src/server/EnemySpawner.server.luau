@@ -1,111 +1,66 @@
---[ Générateur de PNJ sécurisé ]--
+--[ Spawner d'Entités V2 (Map Statique & StreamingEnabled) ]--
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local NPCBrain = require(script.Parent:WaitForChild("NPCBrain"))
-local prefab = ReplicatedStorage:WaitForChild("EnemyPrefab")
+local ServerStorage = game:GetService("ServerStorage")
+local workspace = game:GetService("Workspace")
 
--- 🛡️ SÉCURITÉ 1 : On attend impérativement que le monde soit fini
-print("⏳ Les PNJ attendent la fin de la génération du monde...")
-repeat 
-    task.wait(0.5) 
-until workspace:GetAttribute("WorldGenerated") == true
-print("🚀 Le monde est prêt ! Scan des positions des PNJ...")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local NPCBrain = require(script.Parent:WaitForChild("NPC"):WaitForChild("Brain"))
+local MAX_NPCS = 10 -- ⚙️ Nombre de PNJ à générer sur la carte
 
--- Le laser ne ciblera que le vrai Terrain
-local raycastParams = RaycastParams.new()
-raycastParams.FilterType = Enum.RaycastFilterType.Include
-raycastParams.FilterDescendantsInstances = {workspace.Terrain}
+print("🚀 Démarrage du Spawner de PNJ...")
 
-local function spawnNPC()
-    -- 10 tentatives pour trouver un sol sec (hors de l'eau)
-    for attempt = 1, 10 do
-        local randomX = math.random(-250, 250)
-        local randomZ = math.random(-250, 250)
+-- 🌍 Scanner depuis le ciel pour trouver un sol sec
+local function getSafeSpawnPosition()
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Include
+    raycastParams.FilterDescendantsInstances = {workspace.Terrain} -- On ne scanne que le Terrain
+
+    for i = 1, 10 do -- On tente 10 fois maximum pour trouver un bon point
+        -- Modifie ces valeurs (-400, 400) en fonction de la taille de ta map !
+        local rx = math.random(-25, 25) 
+        local rz = math.random(-25, 25)
+        local rayOrigin = Vector3.new(rx, 200, rz) -- On part de 200 mètres d'altitude
         
-        local origin = Vector3.new(randomX, 150, randomZ)
-        local result = workspace:Raycast(origin, Vector3.new(0, -200, 0), raycastParams)
+        local ray = workspace:Raycast(rayOrigin, Vector3.new(0, -300, 0), raycastParams)
         
-        if result and result.Material ~= Enum.Material.Water then
-            local npc = prefab:Clone()
-            npc.Name = "Vagabond"
-            
-            -- 🛡️ SÉCURITÉ 2 : On les spawn 10 studs AU-DESSUS du sol pour qu'ils tombent proprement
-            npc:PivotTo(CFrame.new(result.Position + Vector3.new(0, 10, 0)))
-            
-            for _, part in ipairs(npc:GetDescendants()) do
-                if part:IsA("BasePart") then part.Anchored = false end
-            end
-            
-            local root = npc:FindFirstChild("HumanoidRootPart")
-            local humanoid = npc:FindFirstChild("Humanoid")
-            if not root or not humanoid then return end
-
-            npc.Parent = workspace
-            root:SetNetworkOwner(nil) -- Garde le contrôle physique sur le serveur
-
-            -- Interface Vie
-            local healthGui = Instance.new("BillboardGui")
-            healthGui.Size = UDim2.new(0, 100, 0, 20)
-            healthGui.StudsOffset = Vector3.new(0, 3, 0)
-            healthGui.AlwaysOnTop = true
-            healthGui.Parent = root
-
-            local healthText = Instance.new("TextLabel")
-            healthText.Size = UDim2.new(1, 0, 1, 0)
-            healthText.BackgroundTransparency = 1
-            healthText.TextColor3 = Color3.fromRGB(255, 50, 50)
-            healthText.Font = Enum.Font.SourceSansBold
-            healthText.TextScaled = true
-            healthText.Parent = healthGui
-            healthText.Text = humanoid.Health .. " / " .. humanoid.MaxHealth
-
-            humanoid.HealthChanged:Connect(function(health)
-                healthText.Text = math.floor(health) .. " / " .. humanoid.MaxHealth
-                if health <= 0 then npc:Destroy() end
-            end)
-
-            -- Interface Bulles de pensée
-            local thoughtGui = Instance.new("BillboardGui")
-            thoughtGui.Name = "ThoughtGui"
-            thoughtGui.Size = UDim2.new(0, 120, 0, 30)
-            thoughtGui.StudsOffset = Vector3.new(0, 4.5, 0)
-            thoughtGui.AlwaysOnTop = true
-            thoughtGui.Parent = root
-
-            local thoughtText = Instance.new("TextLabel")
-            thoughtText.Name = "ThoughtText"
-            thoughtText.Size = UDim2.new(1, 0, 1, 0)
-            thoughtText.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-            thoughtText.BackgroundTransparency = 0.2
-            thoughtText.TextColor3 = Color3.fromRGB(30, 30, 30)
-            thoughtText.Font = Enum.Font.GothamBold
-            thoughtText.TextScaled = true
-            thoughtText.Text = "..."
-            
-            local corner = Instance.new("UICorner")
-            corner.CornerRadius = UDim.new(0.3, 0)
-            corner.Parent = thoughtText
-            thoughtText.Parent = thoughtGui
-
-            -- Connexion de l'IA
-            NPCBrain.Attach(npc)
-            print("✅ Vagabond apparu avec succès aux coordonnées :", randomX, randomZ)
-            return 
+        -- Si on touche le sol et que ce n'est PAS de l'eau
+        if ray and ray.Material ~= Enum.Material.Water then
+            return ray.Position + Vector3.new(0, 4, 0) -- On le lâche 4 studs au-dessus du sol
         end
     end
     
-    -- Sécurité ultime : Si après 10 essais le laser n'a trouvé que de l'eau, on le force à spawn au centre de la map (0, 30, 0) pour ne pas perdre un PNJ
-    warn("⚠️ Impossible de trouver un sol sec pour ce PNJ. Spawn de secours appliqué.")
-    local fallbackNpc = prefab:Clone()
-    fallbackNpc.Name = "Vagabond"
-    fallbackNpc:PivotTo(CFrame.new(0, 30, 0))
-    for _, part in ipairs(fallbackNpc:GetDescendants()) do if part:IsA("BasePart") then part.Anchored = false end end
-    fallbackNpc.Parent = workspace
-    fallbackNpc.HumanoidRootPart:SetNetworkOwner(nil)
-    NPCBrain.Attach(fallbackNpc)
+    return Vector3.new(0, 50, 0) -- Position de secours au centre de la map
 end
 
--- On lance l'apparition de nos 4 vagabonds
-for i = 1, 4 do
-    spawnNPC()
+local function spawnNPC()
+    -- On cherche le modèle dans ReplicatedStorage (ou ServerStorage)
+    local npcTemplate = ReplicatedStorage:FindFirstChild("Vagabond") or ServerStorage:FindFirstChild("Vagabond")
+    
+    if not npcTemplate then
+        warn("⚠️ Modèle 'Vagabond' introuvable dans ReplicatedStorage !")
+        return
+    end
+
+    local clone = npcTemplate:Clone()
+    local spawnPos = getSafeSpawnPosition()
+    
+    -- PivotTo est la méthode moderne (AAA) pour téléporter un modèle complexe avec ses accessoires
+    clone:PivotTo(CFrame.new(spawnPos))
+    clone.Parent = workspace
+    
+    -- 🧠 On branche le cerveau au corps !
+    NPCBrain.Attach(clone)
+    print("✅ Vagabond apparu en :", math.round(spawnPos.X), math.round(spawnPos.Z))
 end
+
+-- On attend 2 petites secondes au démarrage pour laisser le temps au moteur physique de se stabiliser
+task.wait(2)
+
+for i = 1, MAX_NPCS do
+    spawnNPC()
+    task.wait(0.1) -- On espace les spawns d'un dixième de seconde pour éviter un pic de lag (Lag Spike)
+end
+
+print("🌍 Tous les PNJ sont en place et vivent leur vie !")
