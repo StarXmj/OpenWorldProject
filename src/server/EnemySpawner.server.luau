@@ -1,4 +1,4 @@
---[ Spawner d'Entités V2 (Map Statique & StreamingEnabled) ]--
+--[ Spawner d'Entités V2 (Sécurisé avec Logs) ]--
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
@@ -6,10 +6,21 @@ local workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local CoreLogger = require(Shared:WaitForChild("CoreLogger"))
 local NPCBrain = require(script.Parent:WaitForChild("NPC"):WaitForChild("Brain"))
-local MAX_NPCS = 10 -- ⚙️ Nombre de PNJ à générer sur la carte
 
-print("🚀 Démarrage du Spawner de PNJ...")
+local MAX_NPCS = 10 
+
+CoreLogger.info("Spawner", "⏳ En attente de la plantation de la flore et de l'eau...")
+
+-- 🛡️ On attend que PropGenerator ait fini de poser les arbres et l'eau
+repeat 
+    task.wait(0.5) 
+until workspace:GetAttribute("PropsGenerated") == true
+
+CoreLogger.info("Spawner", "🚀 Le monde est prêt, déploiement des PNJ...")
+
+-- (Le reste de ton script spawnNPC() reste identique)
 
 -- 🌍 Scanner depuis le ciel pour trouver un sol sec
 local function getSafeSpawnPosition()

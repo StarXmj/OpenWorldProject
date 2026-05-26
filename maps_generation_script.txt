@@ -1,0 +1,38 @@
+local Terrain = workspace.Terrain
+Terrain:Clear() -- 🧹 Nettoie l'ancien terrain
+
+-- ⚙️ PARAMÈTRES DE LEVEL DESIGN :
+local mapSize = 1000     -- 📏 Taille de la map
+local resolution = 5     -- 🧱 Finesse des blocs
+local amplitude = 130     -- ⛰️ Hauteur des montagnes
+local noiseScale = 120   -- 🌍 Étendue des biomes
+local waterLevel = 20     -- 💧 NIVEAU DE LA MER (Augmente à 10 pour plus de lacs)
+
+local seed = tick() 
+print("⏳ Génération du terrain en cours... Seed :", seed)
+
+for x = -mapSize/2, mapSize/2, resolution do
+	for z = -mapSize/2, mapSize/2, resolution do
+		local noise = math.noise(x / noiseScale, z / noiseScale, seed) * amplitude
+		local y = math.clamp(noise, -200, 200)
+
+		-- 1. Couches de terre
+		local material = Enum.Material.Grass
+		if y < waterLevel + 5 then
+			material = Enum.Material.Sand -- Plage autour de l'eau
+		elseif y > 40 then
+			material = Enum.Material.Rock -- Neige/Roche en altitude
+		end
+
+		-- 2. On génère le terrain physique
+		Terrain:FillBlock(CFrame.new(x, y/2, z), Vector3.new(resolution, math.abs(y) + 20, resolution), material)
+
+		-- 3. NOUVEAU : On remplit d'eau uniquement si on est sous le niveau de la mer !
+		if y < waterLevel then
+			local waterDepth = waterLevel - y
+			Terrain:FillBlock(CFrame.new(x, y + (waterDepth/2), z), Vector3.new(resolution, waterDepth, resolution), Enum.Material.Water)
+		end
+	end
+end
+
+print("✅ Terrain et Océans générés avec succès !")
