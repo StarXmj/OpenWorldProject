@@ -37,19 +37,18 @@ function Brain.Attach(npc)
     local lastWanderTime, lastRestTime, lastAttackTime = 0, 0, 0
 
     -- 🌟 CONNEXION AU MASTER TICK (LE MOTEUR DÉTERMINISTE)
+   -- 🌟 CONNEXION AU MASTER TICK
     local globalTick = ReplicatedStorage:WaitForChild("GlobalTickEvent")
     local brainConnection
     
-    brainConnection = globalTick.Event:Connect(function(tickRate, timeScale)
-        -- Si le PNJ meurt ou est détruit, on coupe instantanément le Cerveau
+    brainConnection = globalTick.Event:Connect(function(deltaTime, inGameDaysPassed, timeScale)
         if not npc or not npc.Parent or humanoid.Health <= 0 then
-            brainConnection:Disconnect()
-            return
+            brainConnection:Disconnect() return
         end
         
-        -- 1. SURVIE & SENS (Basé sur le temps universel)
         local isNight = Lighting.ClockTime < 6 or Lighting.ClockTime > 19
-        local hunger, thirst, fatigue = Metabolism.Update(npc, GameConfig, isNight, tickRate, timeScale)
+        -- On passe 'inGameDaysPassed' au lieu de 'tickRate' !
+        local hunger, thirst, fatigue = Metabolism.Update(npc, GameConfig, isNight, inGameDaysPassed)
         local targetPlayer = Perception.GetAggroTarget(npc)
         
         local trait = npc:GetAttribute("Personality")
@@ -81,11 +80,11 @@ function Brain.Attach(npc)
         if currentState ~= "SEEK_CAMP" then campSleepSpot = nil animMgr:StopSleep() end
         
         -- 🚀 3. VITESSE MULTIPLIÉE PAR L'ÉCHELLE DE TEMPS
-        local baseSpeed = 6
+       local baseSpeed = 6
         if currentState == "REST" or currentState == "SEEK_CAMP" then baseSpeed = 4 
         elseif currentState == "COMBAT" or currentState == "FLEE" then baseSpeed = GameConfig.Entity.SprintSpeed end
         
-        -- La vitesse physique s'accélère si la journée est plus courte !
+        -- Si la journée passe 2x plus vite, ils courent physiquement 2x plus vite !
         humanoid.WalkSpeed = baseSpeed * timeScale
 
         -- 4. EXÉCUTION

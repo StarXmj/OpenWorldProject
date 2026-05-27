@@ -84,23 +84,24 @@ Players.PlayerAdded:Connect(function(player)
 end)
 
 -- Boucle de Survie (Faim / Soif)
-task.spawn(function()
-    while task.wait(GameConfig.Survival.TickRate) do
-        for _, player in ipairs(Players:GetPlayers()) do
-            local char = player.Character
-            if char and char:FindFirstChild("Humanoid") then
-                if char:GetAttribute("Hunger") then
-                    local currentHunger = char:GetAttribute("Hunger")
-                    if currentHunger > 0 then char:SetAttribute("Hunger", currentHunger - GameConfig.Survival.HungerDecay)
-                    else char.Humanoid.Health -= GameConfig.Survival.StarvationDamage end
-                end
-                
-                if char:GetAttribute("Thirst") then
-                    local currentThirst = char:GetAttribute("Thirst")
-                    if currentThirst > 0 then char:SetAttribute("Thirst", currentThirst - GameConfig.Survival.ThirstDecay)
-                    else char.Humanoid.Health -= GameConfig.Survival.DehydrationDamage end
-                end
-            end
+local globalTick = ReplicatedStorage:WaitForChild("GlobalTickEvent")
+globalTick.Event:Connect(function(deltaTime, inGameDaysPassed, timeScale)
+    for _, player in ipairs(Players:GetPlayers()) do
+        local char = player.Character
+        if char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
+            
+            -- Même logique que les PNJ !
+            local hunger = char:GetAttribute("Hunger") or GameConfig.Entity.MaxHunger
+            local thirst = char:GetAttribute("Thirst") or GameConfig.Entity.MaxThirst
+            
+            local hungerDrain = (100 / GameConfig.Survival.DaysToStarve) * inGameDaysPassed
+            local thirstDrain = (100 / GameConfig.Survival.DaysToDehydrate) * inGameDaysPassed
+            
+            if hunger > 0 then char:SetAttribute("Hunger", math.clamp(hunger - hungerDrain, 0, 100))
+            else char.Humanoid:TakeDamage(GameConfig.Survival.StarveDamagePerDay * inGameDaysPassed) end
+            
+            if thirst > 0 then char:SetAttribute("Thirst", math.clamp(thirst - thirstDrain, 0, 100))
+            else char.Humanoid:TakeDamage(GameConfig.Survival.DehydDamagePerDay * inGameDaysPassed) end
         end
     end
 end)

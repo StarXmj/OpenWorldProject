@@ -1,6 +1,6 @@
 local GameConfig = {
     World = { 
-        DayLengthSeconds = 3600, -- 1 heure réelle = 1 jour de jeu
+        DayLengthSeconds = 180, -- 1 heure réelle = 1 jour de jeu
         Gravity = 196.2 
     },
 
@@ -11,12 +11,13 @@ local GameConfig = {
     },
 
     Survival = { 
-        TickRate = 5, 
-        HungerDecay = 2, 
-        ThirstDecay = 3, 
-        -- CORRECTION : 4.17 dégâts toutes les 5s = Mort en exactement 2 minutes (120s)
-        StarvationDamage = 4.17, 
-        DehydrationDamage = 4.17, 
+       DaysToStarve = 0.5,    -- 🍖 Vide la jauge de faim en 1/2 journée
+        DaysToDehydrate = 0.4, -- 💧 Vide la soif un peu plus vite
+        StarveDamagePerDay = 150, -- Dégâts s'il a 0 faim (Meurt en 0.6 jour de famine)
+        DehydDamagePerDay = 200,
+    },
+    Ecology = {
+        DaysToRegrow = 0.1, -- 🫐 Les buissons repoussent en 1/10ème de jour
     },
 
     Items = {

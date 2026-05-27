@@ -1,52 +1,55 @@
---[ Gestionnaire d'Écologie (Nature Organique) ]--
--- Ce script rend la flore vivante. Les buissons s'épuisent et repoussent au fil des jours.
+--[ Gestionnaire d'Écologie Déterministe (Flore Connectée) ]--
 
-local CollectionService = game:GetService("CollectionService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local CoreLogger = require(Shared:WaitForChild("CoreLogger"))
 
-local RECOVERY_TIME = 120 -- Temps en secondes pour qu'un buisson repousse
+local RECOVERY_TIME = 120 -- Temps de base pour la repousse (2 minutes réelles)
 local MAX_FRUITS = 3
 
--- Fonction pour initialiser un buisson
+local folder = workspace:FindFirstChild("Flora") or workspace
+
 local function initBush(bush)
     bush:SetAttribute("Fruits", MAX_FRUITS)
     bush:SetAttribute("RegrowthTimer", 0)
-    
-    -- Optionnel : Changer la couleur selon l'état
-    if bush:IsA("BasePart") then
-        bush.Color = Color3.fromRGB(34, 139, 34) -- Vert forêt vif
-    end
+    if bush:IsA("BasePart") then bush.Color = Color3.fromRGB(34, 139, 34) end
 end
 
--- On cherche tous les buissons de la map
-local folder = workspace:FindFirstChild("Flora") or workspace
-for _, object in ipairs(folder:GetChildren()) do
-    if object.Name == "BerryBush" then
-        initBush(object)
-    end
-end
-
--- La boucle de la Nature
-task.spawn(function()
-    while true do
-        task.wait(5) -- La nature prend son temps (vérification toutes les 5 secondes)
-        
+-- On attend que le PropGenerator ait fini de scanner la carte avant d'armer la flore
+workspace:GetAttributeChangedSignal("PropsGenerated"):Connect(function()
+    if workspace:GetAttribute("PropsGenerated") == true then
         for _, object in ipairs(folder:GetChildren()) do
-            if object.Name == "BerryBush" then
-                local fruits = object:GetAttribute("Fruits") or 0
+            if object.Name == "BerryBush" then initBush(object) end
+        end
+        CoreLogger.info("Écologie", "Flore synchronisée au Master Tick avec succès.")
+    end
+end)
+
+-- 🌟 LE LIEN UNIVERSEL : La nature pousse selon les jours in-game
+local globalTick = ReplicatedStorage:WaitForChild("GlobalTickEvent")
+globalTick.Event:Connect(function(deltaTime, inGameDaysPassed, timeScale)
+    for _, object in ipairs(folder:GetChildren()) do
+        if object.Name == "BerryBush" then
+            local fruits = object:GetAttribute("Fruits") or 0
+            
+            if fruits < MAX_FRUITS then
+                local currentProgress = object:GetAttribute("RegrowthProgress") or 0
+                -- La repousse avance selon la fraction de jour écoulée
+                local newProgress = currentProgress + inGameDaysPassed
                 
-                -- Si le buisson est vide, la nature commence son travail
-                if fruits < MAX_FRUITS then
-                    local timer = (object:GetAttribute("RegrowthTimer") or 0) + 5
+                if newProgress >= GameConfig.Ecology.DaysToRegrow then
+                    object:SetAttribute("Fruits", MAX_FRUITS)
+                    object:SetAttribute("RegrowthProgress", 0)
+                    if object:IsA("BasePart") then object.Color = Color3.fromRGB(34, 139, 34) end
                     
-                    if timer >= RECOVERY_TIME then
-                        -- Le buisson a repoussé !
-                        object:SetAttribute("Fruits", MAX_FRUITS)
-                        object:SetAttribute("RegrowthTimer", 0)
-                        if object:IsA("BasePart") then object.Color = Color3.fromRGB(34, 139, 34) end
-                    else
-                        object:SetAttribute("RegrowthTimer", timer)
-                        if object:IsA("BasePart") then object.Color = Color3.fromRGB(107, 142, 35) end -- Vert terne/épuisé
+                    local berry = object:FindFirstChild("BerryDrop")
+                    if berry then
+                        berry.Transparency = 0
+                        local prompt = berry:FindFirstChildOfClass("ProximityPrompt")
+                        if prompt then prompt.Enabled = true end
                     end
+                else
+                    object:SetAttribute("RegrowthProgress", newProgress)
                 end
             end
         end
