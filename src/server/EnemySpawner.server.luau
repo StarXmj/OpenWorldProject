@@ -31,8 +31,8 @@ local function getSafeSpawnPosition()
 
     for i = 1, 10 do
         -- 🛡️ CORRECTION : Large zone de spawn pour éviter les collisions mortelles !
-        local rx = math.random(-300, 300) 
-        local rz = math.random(-300, 300)
+        local rx = math.random(-25, 25) 
+        local rz = math.random(-25, 25)
         local rayOrigin = Vector3.new(rx, 200, rz) 
         
         local ray = workspace:Raycast(rayOrigin, Vector3.new(0, -300, 0), raycastParams)

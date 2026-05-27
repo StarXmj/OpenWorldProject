@@ -1,4 +1,4 @@
---[ IA Component : Animator (Mouvements & Sommeil) ]--
+--[ IA Component : Animator (Mouvements & Sommeil Loggé) ]--
 local Animator = {}
 Animator.__index = Animator
 
@@ -16,7 +16,6 @@ function Animator.new(humanoid, gameConfig)
     self.grab = loadAnim(gameConfig.NPC.GrabAnimId, Enum.AnimationPriority.Action)
     self.punch = loadAnim(gameConfig.Combat.PunchAnimId, Enum.AnimationPriority.Action)
     
-    -- 💤 Nouvelles Animations de Sommeil
     self.sleepAnims = {
         loadAnim("rbxassetid://137946006827250", Enum.AnimationPriority.Action),
         loadAnim("rbxassetid://97984033726444", Enum.AnimationPriority.Action)
@@ -25,7 +24,7 @@ function Animator.new(humanoid, gameConfig)
 
     humanoid.Running:Connect(function(speed)
         if speed > 0.1 then
-            self:StopSleep() -- Auto-réveil si le PNJ est forcé de fuir !
+            self:StopSleep() 
             if not self.walk.IsPlaying then self.walk:Play() end
             self.walk:AdjustSpeed(speed / gameConfig.Entity.WalkSpeed)
         else
@@ -36,11 +35,15 @@ function Animator.new(humanoid, gameConfig)
     return self
 end
 
+-- 💤 Retourne l'ID pour pouvoir le logger dans le cerveau
 function Animator:PlaySleep()
-    if self.currentSleep then return end
+    if self.currentSleep then return nil end
     self.currentSleep = self.sleepAnims[math.random(1, #self.sleepAnims)]
     self.currentSleep.Looped = true
     self.currentSleep:Play()
+    
+    local animId = string.match(self.currentSleep.Animation.AnimationId, "%d+")
+    return animId
 end
 
 function Animator:StopSleep()

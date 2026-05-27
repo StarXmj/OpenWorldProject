@@ -1,19 +1,28 @@
---[ IA Component : Metabolism (Survie & Stats synchronisées et Normalisées) ]--
+--[ IA Component : Metabolism (Survie & Sommeil Réaliste) ]--
 local Metabolism = {}
 
-function Metabolism.Update(npc, config, isNight, tickRate, timeScale)
-    -- 📐 CORRECTION CRITIQUE : Normalisation mathématique
-    -- tickRate vaut 0.2s. config.Survival.TickRate vaut 5s.
-    -- On divise pour éviter qu'ils ne meurent 25x plus vite que prévu !
-    local baseInterval = config.Survival.TickRate or 5
-    local timeFactor = (tickRate / baseInterval) * timeScale
+function Metabolism.Update(npc, config, isNight, tickRate, timeScale, inGameDaysPassed, currentState)
+    local hungerDrain = (100 / config.Survival.DaysToStarve) * inGameDaysPassed
+    local thirstDrain = (100 / config.Survival.DaysToDehydrate) * inGameDaysPassed
+    
+    local isSleeping = (currentState == "SEEK_CAMP")
+    local fatigueDrain = 0
+    
+    if isSleeping then
+        -- 😴 Pendant le sommeil : restauration de la fatigue ET réduction forte de la faim/soif
+        fatigueDrain = -(100 / (1/3)) * inGameDaysPassed
+        hungerDrain = hungerDrain * 0.3 
+        thirstDrain = thirstDrain * 0.3
+    else
+        fatigueDrain = (100 / (2/3)) * inGameDaysPassed
+    end
 
-    local hungerDrain = (config.Survival.HungerDecay * timeFactor)
-    local thirstDrain = (config.Survival.ThirstDecay * timeFactor)
-    local fatigueDrain = (isNight and 0.4 or -0.1) * timeFactor * 5
+    if isNight and not isSleeping then
+        fatigueDrain = fatigueDrain * 1.5
+    end
 
-    local hunger = (npc:GetAttribute("Hunger") or 100) - hungerDrain
-    local thirst = (npc:GetAttribute("Thirst") or 100) - thirstDrain
+    local hunger = (npc:GetAttribute("Hunger") or config.Entity.MaxHunger) - hungerDrain
+    local thirst = (npc:GetAttribute("Thirst") or config.Entity.MaxThirst) - thirstDrain
     local fatigue = (npc:GetAttribute("Fatigue") or 0) + fatigueDrain
 
     hunger = math.clamp(hunger, 0, config.Entity.MaxHunger)
@@ -26,9 +35,8 @@ function Metabolism.Update(npc, config, isNight, tickRate, timeScale)
 
     local hum = npc:FindFirstChild("Humanoid")
     if hum then
-        -- Les dégâts mortels sont aussi normalisés pour ne pas les "One-Shot"
-        if hunger <= 0 then hum:TakeDamage(config.Survival.StarvationDamage * timeFactor) end
-        if thirst <= 0 then hum:TakeDamage(config.Survival.DehydrationDamage * timeFactor) end
+        if hunger <= 0 then hum:TakeDamage(config.Survival.StarveDamagePerDay * inGameDaysPassed) end
+        if thirst <= 0 then hum:TakeDamage(config.Survival.DehydDamagePerDay * inGameDaysPassed) end
     end
     
     return hunger, thirst, fatigue
