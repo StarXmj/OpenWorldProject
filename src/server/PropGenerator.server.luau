@@ -78,34 +78,64 @@ task.spawn(function()
                         bush.Anchored = true
                         bush.Parent = floraFolder
                         
-                        -- Initialisation pour l'EcologyManager
-                        bush:SetAttribute("Fruits", 3)
+                        -- 🎲 1. PROBABILITÉS EXACTES
+                        local capacityRoll = math.random()
+                        local maxFruits = 1
+                        if capacityRoll <= GameConfig.Generation.BerryQuantityChances.Four then maxFruits = 4
+                        elseif capacityRoll <= GameConfig.Generation.BerryQuantityChances.Three then maxFruits = 3
+                        elseif capacityRoll <= GameConfig.Generation.BerryQuantityChances.Two then maxFruits = 2
+                        end
                         
-                        -- Création de la baie physique pour le joueur
-                        local berry = Instance.new("Part")
-                        berry.Name = "BerryDrop"
-                        berry.Size = Vector3.new(0.7, 0.7, 0.7)
-                        berry.Color = Color3.fromRGB(180, 10, 50)
-                        berry.Shape = Enum.PartType.Ball
-                        berry.Anchored = true 
-                        berry.CanCollide = false
-                        berry.Position = bush.Position + Vector3.new(0, 2, 0)
-                        berry.Parent = bush
+                        -- 🧬 L'ADN du buisson
+                        bush:SetAttribute("MaxFruits", maxFruits)
+                        bush:SetAttribute("Fruits", maxFruits)
                         
-                        local prompt = Instance.new("ProximityPrompt")
-                        prompt.ActionText = "Cueillir"
-                        prompt.ObjectText = "Baie Sauvage"
-                        prompt.Parent = berry
-                        
-                        prompt.Triggered:Connect(function(player)
-                            local giveItemEvent = ReplicatedStorage:FindFirstChild("GiveItemEvent")
-                            if giveItemEvent then 
-                                giveItemEvent:Fire(player, "Berry", 1) 
-                                berry.Transparency = 1
-                                prompt.Enabled = false
-                                CoreLogger.debug("Inventaire", player.Name .. " a cueilli une baie.")
-                            end
-                        end)
+                        -- 🍓 2. GÉNÉRATION ORGANIQUE DES BAIES INDIVIDUELLES
+                        for i = 1, maxFruits do
+                            local berry = Instance.new("Part")
+                            berry.Name = "Berry_" .. i
+                            berry.Size = Vector3.new(0.7, 0.7, 0.7)
+                            berry.Color = Color3.fromRGB(180, 10, 50)
+                            berry.Shape = Enum.PartType.Ball
+                            berry.Anchored = true 
+                            berry.CanCollide = false
+                            
+                            -- Placement naturel sans chevauchement (Cercle autour du buisson)
+                            local angle = (i / maxFruits) * math.pi * 2 + math.random(-0.2, 0.2)
+                            local radiusXZ = 1.6
+                            local heightY = math.random(2, 12) / 10 -- Hauteur variable entre 0.2 et 1.2
+                            local offsetX = math.cos(angle) * radiusXZ
+                            local offsetZ = math.sin(angle) * radiusXZ
+                            
+                            berry.Position = bush.CFrame:PointToWorldSpace(Vector3.new(offsetX, heightY, offsetZ))
+                            berry.Parent = bush
+                            
+                            -- Variables d'état individuelles
+                            berry:SetAttribute("IsGrown", true)
+                            berry:SetAttribute("RegrowthProgress", 0)
+                            
+                            local prompt = Instance.new("ProximityPrompt")
+                            prompt.ActionText = "Cueillir"
+                            prompt.ObjectText = "Baie Sauvage"
+                            prompt.Parent = berry
+                            
+                            -- Interaction Joueur sur CETTE baie spécifique
+                            prompt.Triggered:Connect(function(player)
+                                if berry:GetAttribute("IsGrown") then
+                                    berry:SetAttribute("IsGrown", false)
+                                    berry:SetAttribute("RegrowthProgress", 0)
+                                    berry.Size = Vector3.zero -- On la cache physiquement !
+                                    prompt.Enabled = false
+                                    
+                                    -- Met à jour le compteur global du buisson
+                                    local current = bush:GetAttribute("Fruits") or 1
+                                    bush:SetAttribute("Fruits", math.max(0, current - 1))
+                                    
+                                    local giveItemEvent = ReplicatedStorage:FindFirstChild("GiveItemEvent")
+                                    if giveItemEvent then giveItemEvent:Fire(player, "Berry", 1) end
+                                end
+                            end)
+                        end
                         countBushes += 1
                     end
                 end

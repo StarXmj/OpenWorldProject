@@ -1,4 +1,4 @@
---[ IA Component : Perception (Vision corrigée pour Dossiers & ADN) ]--
+--[ IA Component : Perception (Vision 2D & Dossiers ciblés) ]--
 local Perception = {}
 local Players = game:GetService("Players")
 
@@ -19,48 +19,45 @@ function Perception.FindNearest(npc, searchType, maxDist)
 
     local closest, minDist = nil, maxDist or math.huge
     
-    -- 📁 1. SÉLECTION DU BON DOSSIER
+    -- 📁 1. CIBLAGE DU BON DOSSIER
     local folder = workspace
     if searchType == "Water" then
         folder = workspace:FindFirstChild("WaterWaypoints")
     elseif searchType == "BerryBush" then
-        folder = workspace:FindFirstChild("Flora") -- ⬅️ CORRECTION : Il regarde dans le dossier Flora !
+        folder = workspace:FindFirstChild("Flora") -- 🌿 L'IA regarde enfin dans la forêt !
     end
 
     if folder then
         for _, obj in ipairs(folder:GetChildren()) do
             local isValid = false
             
-            -- 🔍 2. FILTRAGE INTELLIGENT
+            -- 🔍 2. FILTRAGE
             if searchType == "Water" then
                 isValid = true
             elseif searchType == "BerryBush" and obj.Name == "BerryBush" then
-                -- On ignore les buissons vides
-                if (obj:GetAttribute("Fruits") or 0) > 0 then
-                    isValid = true
-                end
+                if (obj:GetAttribute("Fruits") or 0) > 0 then isValid = true end
             elseif searchType == "Campfire" and obj.Name == "Campfire" then
                 isValid = true
             elseif searchType == "Vagabond" then
-                -- CORRECTION SOCIALE : On reconnait un autre PNJ grâce à son ADN (Personality)
-                if obj:GetAttribute("Personality") ~= nil and obj ~= npc then
-                    isValid = true
-                end
+                if obj:GetAttribute("Personality") ~= nil and obj ~= npc then isValid = true end
             end
             
-            -- 📏 3. CALCUL DE LA DISTANCE
             if isValid then
                 local targetPos = nil
                 
-                -- Si c'est un PNJ, on vise son torse, sinon on vise le bloc
-                if obj:IsA("Model") and obj:FindFirstChild("HumanoidRootPart") then
-                    targetPos = obj.HumanoidRootPart.Position
+                -- 🏕️ 3. RÉCUPÉRATION DU CENTRE EXACT (Même sans HumanoidRootPart)
+                if obj:IsA("Model") then
+                    targetPos = obj:FindFirstChild("HumanoidRootPart") and obj.HumanoidRootPart.Position or obj:GetPivot().Position
                 elseif obj:IsA("BasePart") then
                     targetPos = obj.Position
                 end
                 
                 if targetPos then
-                    local dist = (targetPos - root.Position).Magnitude
+                    -- 📏 4. DISTANCE 2D (Ignore la hauteur Y pour éviter les blocages)
+                    local flatRoot = Vector3.new(root.Position.X, 0, root.Position.Z)
+                    local flatTarget = Vector3.new(targetPos.X, 0, targetPos.Z)
+                    local dist = (flatRoot - flatTarget).Magnitude
+                    
                     if dist < minDist then 
                         minDist = dist 
                         closest = obj 
@@ -72,7 +69,6 @@ function Perception.FindNearest(npc, searchType, maxDist)
     return closest, minDist
 end
 
--- 🏕️ Positionnement autour du feu
 function Perception.GetCampSleepPosition(campPosition)
     local angle = math.random() * math.pi * 2 
     local distance = math.random(5, 12) 

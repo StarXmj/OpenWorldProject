@@ -23,26 +23,27 @@ CoreLogger.info("Spawner", "🚀 Le monde est prêt, déploiement des PNJ...")
 -- (Le reste de ton script spawnNPC() reste identique)
 
 -- 🌍 Scanner depuis le ciel pour trouver un sol sec
+-- 🌍 Scanner depuis le ciel pour trouver un sol sec
 local function getSafeSpawnPosition()
     local raycastParams = RaycastParams.new()
     raycastParams.FilterType = Enum.RaycastFilterType.Include
-    raycastParams.FilterDescendantsInstances = {workspace.Terrain} -- On ne scanne que le Terrain
+    raycastParams.FilterDescendantsInstances = {workspace.Terrain}
 
-    for i = 1, 10 do -- On tente 10 fois maximum pour trouver un bon point
-        -- Modifie ces valeurs (-400, 400) en fonction de la taille de ta map !
-        local rx = math.random(-25, 25) 
-        local rz = math.random(-25, 25)
-        local rayOrigin = Vector3.new(rx, 200, rz) -- On part de 200 mètres d'altitude
+    for i = 1, 10 do
+        -- 🛡️ CORRECTION : Large zone de spawn pour éviter les collisions mortelles !
+        local rx = math.random(-300, 300) 
+        local rz = math.random(-300, 300)
+        local rayOrigin = Vector3.new(rx, 200, rz) 
         
         local ray = workspace:Raycast(rayOrigin, Vector3.new(0, -300, 0), raycastParams)
         
-        -- Si on touche le sol et que ce n'est PAS de l'eau
         if ray and ray.Material ~= Enum.Material.Water then
-            return ray.Position + Vector3.new(0, 4, 0) -- On le lâche 4 studs au-dessus du sol
+            -- On les fait tomber d'un peu plus haut (6 studs) en sécurité
+            return ray.Position + Vector3.new(0, 6, 0)
         end
     end
     
-    return Vector3.new(0, 50, 0) -- Position de secours au centre de la map
+    return Vector3.new(0, 80, 0) 
 end
 
 local function spawnNPC()

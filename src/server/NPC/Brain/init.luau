@@ -1,4 +1,4 @@
---[ IA Component : Cerveau Déterministe (Synchronisé au Master Tick) ]--
+--[ IA Component : Cerveau Déterministe (Utility AI & Survie) ]--
 local Brain = {}
 
 local Players = game:GetService("Players")
@@ -27,94 +27,169 @@ function Brain.Attach(npc)
     local nav = Navigator.new(npc) 
     local animMgr = Animator.new(humanoid, GameConfig)
     
-    humanoid.MaxHealth = GameConfig.Entity.MaxHealth humanoid.Health = GameConfig.Entity.MaxHealth
-    npc:SetAttribute("Hunger", GameConfig.Entity.MaxHunger) npc:SetAttribute("Thirst", GameConfig.Entity.MaxThirst)
-    npc:SetAttribute("Fatigue", 0) npc:SetAttribute("Stamina", GameConfig.Entity.MaxStamina)
-    npc:SetAttribute("Combat_Level", 1) npc:SetAttribute("Resistance_Level", 1)
+    -- 🛡️ CORRECTION SYNTAXE : Lignes bien séparées pour l'initialisation !
+    humanoid.MaxHealth = GameConfig.Entity.MaxHealth 
+    humanoid.Health = GameConfig.Entity.MaxHealth
+    
+    npc:SetAttribute("Hunger", GameConfig.Entity.MaxHunger) 
+    npc:SetAttribute("Thirst", GameConfig.Entity.MaxThirst)
+    npc:SetAttribute("Fatigue", 0) 
+    npc:SetAttribute("Stamina", GameConfig.Entity.MaxStamina)
+    npc:SetAttribute("Combat_Level", 1) 
+    npc:SetAttribute("Resistance_Level", 1)
+
+    -- Timers de secours
+    npc:SetAttribute("WaterDespair", 0)
+    npc:SetAttribute("FoodDespair", 0)
 
     local currentState = "WANDER"
     local wanderTarget, campSleepSpot, socializeTarget = nil, nil, nil
     local lastWanderTime, lastRestTime, lastAttackTime = 0, 0, 0
 
-    -- 🌟 CONNEXION AU MASTER TICK (LE MOTEUR DÉTERMINISTE)
-   -- 🌟 CONNEXION AU MASTER TICK
     local globalTick = ReplicatedStorage:WaitForChild("GlobalTickEvent")
     local brainConnection
     
-    brainConnection = globalTick.Event:Connect(function(deltaTime, inGameDaysPassed, timeScale)
+    brainConnection = globalTick.Event:Connect(function(tickRate, timeScale)
         if not npc or not npc.Parent or humanoid.Health <= 0 then
-            brainConnection:Disconnect() return
+            brainConnection:Disconnect() 
+            return
         end
         
         local isNight = Lighting.ClockTime < 6 or Lighting.ClockTime > 19
-        -- On passe 'inGameDaysPassed' au lieu de 'tickRate' !
-        local hunger, thirst, fatigue = Metabolism.Update(npc, GameConfig, isNight, inGameDaysPassed)
+        local hunger, thirst, fatigue = Metabolism.Update(npc, GameConfig, isNight, tickRate, timeScale)
         local targetPlayer = Perception.GetAggroTarget(npc)
         
         local trait = npc:GetAttribute("Personality")
-        local fleeThreshold = 0.2 
-        if trait == "Coward" then fleeThreshold = 0.5 end 
-        if trait == "Aggressive" then fleeThreshold = 0.05 end
+        local fleeThreshold = (trait == "Coward") and 0.5 or ((trait == "Aggressive") and 0.05 or 0.2)
+        
+        local healthPct = humanoid.Health / humanoid.MaxHealth
+        local hungerPct = hunger / GameConfig.Entity.MaxHunger
+        local thirstPct = thirst / GameConfig.Entity.MaxThirst
 
-        -- 2. DÉCISION
+        local now = os.clock()
+        local ignoreWater = (now - npc:GetAttribute("WaterDespair")) < 15
+        local ignoreFood = (now - npc:GetAttribute("FoodDespair")) < 15
+
         local oldState = currentState
-        if targetPlayer then currentState = humanoid.Health <= (humanoid.MaxHealth * fleeThreshold) and "FLEE" or "COMBAT"
-        elseif thirst <= (GameConfig.Entity.MaxThirst * 0.4) then currentState = "SEEK_WATER"
-        elseif hunger <= (GameConfig.Entity.MaxHunger * 0.4) then currentState = "SEEK_FOOD"
+        
+        -- ⚖️ SYSTÈME DE PRIORITÉS
+        if healthPct <= fleeThreshold and targetPlayer then currentState = "FLEE"
+        elseif thirstPct <= 0.25 and not ignoreWater then currentState = "SEEK_WATER"
+        elseif hungerPct <= 0.25 and not ignoreFood then currentState = "SEEK_FOOD"
+        elseif targetPlayer then currentState = "COMBAT"
+        elseif thirstPct <= 0.5 and not ignoreWater then currentState = "SEEK_WATER"
+        elseif hungerPct <= 0.5 and not ignoreFood then currentState = "SEEK_FOOD"
         elseif fatigue >= 80 or isNight then currentState = "SEEK_CAMP"
         else
-            if currentState == "REST" and os.clock() - lastRestTime < (6 / timeScale) then currentState = "REST"
+            if currentState == "REST" and now - lastRestTime < (6 / timeScale) then currentState = "REST"
             elseif currentState == "SOCIALIZE" and socializeTarget and socializeTarget.Parent then currentState = "SOCIALIZE"
             else
                 currentState = "WANDER"
-                local rng = math.random(1, 30)
-                if rng == 1 then 
-                    currentState = "REST" lastRestTime = os.clock() 
-                elseif rng == 2 and trait ~= "Aggressive" then
-                    local friend, dist = Perception.FindNearest(npc, "Vagabond", 40)
+                if math.random(1, 30) == 1 then currentState = "REST" lastRestTime = now
+                elseif math.random(1, 30) == 2 and trait ~= "Aggressive" then
+                    local friend = Perception.FindNearest(npc, "Vagabond", 40)
                     if friend and friend ~= npc then socializeTarget = friend currentState = "SOCIALIZE" end
                 end
             end
         end
 
+        npc:SetAttribute("Debug_State", currentState)
         if currentState ~= "SEEK_CAMP" then campSleepSpot = nil animMgr:StopSleep() end
         
-        -- 🚀 3. VITESSE MULTIPLIÉE PAR L'ÉCHELLE DE TEMPS
-       local baseSpeed = 6
+        local baseSpeed = 6
         if currentState == "REST" or currentState == "SEEK_CAMP" then baseSpeed = 4 
         elseif currentState == "COMBAT" or currentState == "FLEE" then baseSpeed = GameConfig.Entity.SprintSpeed end
-        
-        -- Si la journée passe 2x plus vite, ils courent physiquement 2x plus vite !
         humanoid.WalkSpeed = baseSpeed * timeScale
 
-        -- 4. EXÉCUTION
+        -- 🏃‍♂️ EXÉCUTION
         if currentState == "COMBAT" then
             local targetRoot = targetPlayer:FindFirstChild("HumanoidRootPart")
-            local dist = (targetRoot.Position - root.Position).Magnitude
-            if dist <= (GameConfig.Combat.AttackRange or 6) then
+            if (targetRoot.Position - root.Position).Magnitude <= (GameConfig.Combat.AttackRange or 6) then
                 nav:Stop()
-                
-                -- Le Cooldown de frappe est divisé par le TimeScale (il frappe plus vite si le temps s'accélère)
-                local dynamicCooldown = (GameConfig.Combat.Cooldown or 0.8) / timeScale
-                
-                if os.clock() - lastAttackTime >= dynamicCooldown then
-                    lastAttackTime = os.clock()
-                    Logger.log(npc, currentState, "😡 Tiens ça !")
-                    animMgr:PlayPunch()
+                if now - lastAttackTime >= (GameConfig.Combat.Cooldown or 0.8) / timeScale then
+                    lastAttackTime = now Logger.log(npc, currentState, "😡 Tiens ça !") animMgr:PlayPunch()
                     task.spawn(function()
                         task.wait((GameConfig.Combat.WindUpTime or 0.25) / timeScale)
                         CombatLogic.ExecuteAttack(npc, GameConfig)
                     end)
                 end
             else
-                if dist <= 30 and nav:HasLineOfSight(targetPlayer, dist) then
-                    nav:Stop() humanoid:MoveTo(targetRoot.Position)
-                else
-                    nav:SmartMoveTo(targetRoot.Position)
-                end
+                if nav:HasLineOfSight(targetPlayer, 30) then nav:Stop() humanoid:MoveTo(targetRoot.Position)
+                else nav:SmartMoveTo(targetRoot.Position) end
             end
 
-        -- (Reste des États : WANDER, SOCIALIZE, SEEK_CAMP, etc... identique à avant)
+        elseif currentState == "FLEE" then
+            local targetRoot = targetPlayer:FindFirstChild("HumanoidRootPart")
+            if targetRoot then
+                local fleeDir = (root.Position - targetRoot.Position).Unit
+                nav:SmartMoveTo(root.Position + fleeDir * 40)
+                Logger.log(npc, currentState, "😱 Fuyez !")
+            end
+
+        elseif currentState == "SEEK_WATER" then
+            local closestWater, minDist = Perception.FindNearest(npc, "Water")
+            if closestWater then
+                if minDist <= 15 then 
+                    nav:Stop() Logger.log(npc, currentState, "💧 Glou glou...") animMgr:PlayGrab() 
+                    npc:SetAttribute("Thirst", GameConfig.Entity.MaxThirst)
+                    npc:SetAttribute("WaterDespair", 0) 
+                else nav:SmartMoveTo(closestWater.Position) end
+            else 
+                Logger.log(npc, currentState, "🏜️ Pas d'eau...")
+                npc:SetAttribute("WaterDespair", now) 
+                currentState = "WANDER" 
+            end
+
+        elseif currentState == "SEEK_FOOD" then
+            local closestFood, minDist = Perception.FindNearest(npc, "BerryBush")
+            if closestFood then
+                if minDist <= 10 then 
+                    nav:Stop() Logger.log(npc, currentState, "🫐 Récolte...") animMgr:PlayGrab() 
+                    
+                    local hasEaten = false
+                    for _, berry in ipairs(closestFood:GetChildren()) do
+                        if string.sub(berry.Name, 1, 6) == "Berry_" and berry:GetAttribute("IsGrown") == true then
+                            berry:SetAttribute("IsGrown", false)
+                            berry:SetAttribute("RegrowthProgress", 0)
+                            berry.Size = Vector3.zero
+                            local prompt = berry:FindFirstChildOfClass("ProximityPrompt")
+                            if prompt then prompt.Enabled = false end
+                            
+                            local current = closestFood:GetAttribute("Fruits") or 1
+                            closestFood:SetAttribute("Fruits", math.max(0, current - 1))
+                            hasEaten = true
+                            break 
+                        end
+                    end
+                    
+                    if hasEaten then
+                        npc:SetAttribute("Hunger", GameConfig.Entity.MaxHunger)
+                        npc:SetAttribute("FoodDespair", 0)
+                    else
+                        npc:SetAttribute("FoodDespair", now)
+                    end
+                    task.wait(1)
+                else nav:SmartMoveTo(closestFood.Position) end
+            else 
+                Logger.log(npc, currentState, "🍖 Pas de baies...")
+                npc:SetAttribute("FoodDespair", now) 
+                currentState = "WANDER" 
+            end
+
+        elseif currentState == "SEEK_CAMP" then
+            local closestCamp, minCampDist = Perception.FindNearest(npc, "Campfire", 800)
+            if closestCamp then 
+                if not campSleepSpot then campSleepSpot = Perception.GetCampSleepPosition(closestCamp:GetPivot().Position) end
+                local flatDist = (Vector3.new(campSleepSpot.X, 0, campSleepSpot.Z) - Vector3.new(root.Position.X, 0, root.Position.Z)).Magnitude
+                if flatDist <= 4 then
+                    nav:Stop() animMgr:PlaySleep() Logger.log(npc, currentState, "💤 Zzz...")
+                    npc:SetAttribute("Fatigue", math.clamp(fatigue - (1 * tickRate * timeScale), 0, 100))
+                else nav:SmartMoveTo(campSleepSpot) end
+            else
+                nav:Stop() animMgr:PlaySleep() Logger.log(npc, currentState, "🥶 Nuit glaciale...")
+                npc:SetAttribute("Fatigue", math.clamp(fatigue - (0.5 * tickRate * timeScale), 0, 100))
+            end
+
         elseif currentState == "SOCIALIZE" then
             if socializeTarget and socializeTarget.Parent then
                 local targetRoot = socializeTarget:FindFirstChild("HumanoidRootPart")
@@ -130,37 +205,9 @@ function Brain.Attach(npc)
                 end
             else socializeTarget = nil end
 
-        elseif currentState == "SEEK_CAMP" then
-            local closestCamp, minCampDist = Perception.FindNearest(npc, "Campfire", 800)
-            if closestCamp then 
-                if not campSleepSpot then campSleepSpot = Perception.GetCampSleepPosition(closestCamp.Position) end
-                if (campSleepSpot - root.Position).Magnitude <= 4 then
-                    nav:Stop() animMgr:PlaySleep() Logger.log(npc, currentState, "💤 Zzz...")
-                    -- Récupération modifiée par le temps
-                    npc:SetAttribute("Fatigue", math.clamp(fatigue - (1 * tickRate * timeScale), 0, 100))
-                else nav:SmartMoveTo(campSleepSpot) end
-            else
-                nav:Stop() animMgr:PlaySleep()
-                npc:SetAttribute("Fatigue", math.clamp(fatigue - (0.5 * tickRate * timeScale), 0, 100))
-            end
-
-        elseif currentState == "SEEK_WATER" then
-            local closestWater, minDist = Perception.FindNearest(npc, "Water")
-            if closestWater then
-                if minDist <= 6 then nav:Stop() Logger.log(npc, currentState, "💧 Glou glou...") animMgr:PlayGrab() npc:SetAttribute("Thirst", GameConfig.Entity.MaxThirst)
-                else nav:SmartMoveTo(closestWater.Position) end
-            else currentState = "WANDER" end
-
-        elseif currentState == "SEEK_FOOD" then
-            local closestFood, minDist = Perception.FindNearest(npc, "BerryBush")
-            if closestFood then
-                if minDist <= 5 then nav:Stop() Logger.log(npc, currentState, "🫐 Récolte...") animMgr:PlayGrab() closestFood:SetAttribute("Fruits", (closestFood:GetAttribute("Fruits") or 0) - 1) npc:SetAttribute("Hunger", GameConfig.Entity.MaxHunger)
-                else nav:SmartMoveTo(closestFood.Position) end
-            else currentState = "WANDER" end
-
         elseif currentState == "WANDER" then
-            if not wanderTarget or os.clock() - lastWanderTime > (6 / timeScale) or humanoid.MoveDirection.Magnitude < 0.1 then
-                lastWanderTime = os.clock() wanderTarget = nav:GetSafeWanderTarget() Logger.log(npc, currentState, "💭 J'explore...")
+            if not wanderTarget or now - lastWanderTime > (6 / timeScale) or humanoid.MoveDirection.Magnitude < 0.1 then
+                lastWanderTime = now wanderTarget = nav:GetSafeWanderTarget() Logger.log(npc, currentState, "💭 J'explore...")
             end
             if wanderTarget then nav:SmartMoveTo(wanderTarget) end
         end

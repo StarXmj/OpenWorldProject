@@ -1,57 +1,63 @@
---[ Gestionnaire d'Écologie Déterministe (Flore Connectée) ]--
-
+--[ Gestionnaire d'Écologie (Croissance Animée Individuelle) ]--
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local CoreLogger = require(Shared:WaitForChild("CoreLogger"))
 
-local RECOVERY_TIME = 120 -- Temps de base pour la repousse (2 minutes réelles)
-local MAX_FRUITS = 3
-
 local folder = workspace:FindFirstChild("Flora") or workspace
+local FULL_SIZE = Vector3.new(0.7, 0.7, 0.7)
 
-local function initBush(bush)
-    bush:SetAttribute("Fruits", MAX_FRUITS)
-    bush:SetAttribute("RegrowthTimer", 0)
-    if bush:IsA("BasePart") then bush.Color = Color3.fromRGB(34, 139, 34) end
-end
-
--- On attend que le PropGenerator ait fini de scanner la carte avant d'armer la flore
 workspace:GetAttributeChangedSignal("PropsGenerated"):Connect(function()
     if workspace:GetAttribute("PropsGenerated") == true then
-        for _, object in ipairs(folder:GetChildren()) do
-            if object.Name == "BerryBush" then initBush(object) end
-        end
-        CoreLogger.info("Écologie", "Flore synchronisée au Master Tick avec succès.")
+        CoreLogger.info("Écologie", "Système de croissance individuelle activé.")
     end
 end)
 
--- 🌟 LE LIEN UNIVERSEL : La nature pousse selon les jours in-game
 local globalTick = ReplicatedStorage:WaitForChild("GlobalTickEvent")
 globalTick.Event:Connect(function(deltaTime, inGameDaysPassed, timeScale)
-    for _, object in ipairs(folder:GetChildren()) do
-        if object.Name == "BerryBush" then
-            local fruits = object:GetAttribute("Fruits") or 0
+    local daysToRegrow = GameConfig.Ecology.DaysToRegrow or 0.1
+    
+    for _, bush in ipairs(folder:GetChildren()) do
+        if bush.Name == "BerryBush" then
+            local fruitsAvailable = 0
             
-            if fruits < MAX_FRUITS then
-                local currentProgress = object:GetAttribute("RegrowthProgress") or 0
-                -- La repousse avance selon la fraction de jour écoulée
-                local newProgress = currentProgress + inGameDaysPassed
-                
-                if newProgress >= GameConfig.Ecology.DaysToRegrow then
-                    object:SetAttribute("Fruits", MAX_FRUITS)
-                    object:SetAttribute("RegrowthProgress", 0)
-                    if object:IsA("BasePart") then object.Color = Color3.fromRGB(34, 139, 34) end
+            -- On analyse chaque baie du buisson indépendamment
+            for _, child in ipairs(bush:GetChildren()) do
+                if string.sub(child.Name, 1, 6) == "Berry_" then
                     
-                    local berry = object:FindFirstChild("BerryDrop")
-                    if berry then
-                        berry.Transparency = 0
-                        local prompt = berry:FindFirstChildOfClass("ProximityPrompt")
-                        if prompt then prompt.Enabled = true end
+                    if child:GetAttribute("IsGrown") == true then
+                        fruitsAvailable += 1
+                    else
+                        -- La baie est en train de pousser
+                        local progress = child:GetAttribute("RegrowthProgress") or 0
+                        local newProgress = progress + inGameDaysPassed
+                        
+                        if newProgress >= daysToRegrow then
+                            -- 🌿 FIN DE LA CROISSANCE
+                            child:SetAttribute("IsGrown", true)
+                            child:SetAttribute("RegrowthProgress", 0)
+                            child.Size = FULL_SIZE
+                            
+                            local prompt = child:FindFirstChildOfClass("ProximityPrompt")
+                            if prompt then prompt.Enabled = true end
+                            
+                            fruitsAvailable += 1
+                        else
+                            -- 📈 ANIMATION DE CROISSANCE PROGRESSIVE
+                            child:SetAttribute("RegrowthProgress", newProgress)
+                            
+                            -- Calcul mathématique pour une animation fluide (Easing)
+                            local scale = newProgress / daysToRegrow
+                            local smoothScale = 1 - (1 - scale) * (1 - scale) -- OutQuad Easing
+                            
+                            child.Size = FULL_SIZE * smoothScale
+                        end
                     end
-                else
-                    object:SetAttribute("RegrowthProgress", newProgress)
                 end
             end
+            
+            -- Synchronisation absolue de la variable du buisson pour le Panel et l'IA
+            bush:SetAttribute("Fruits", fruitsAvailable)
         end
     end
 end)

@@ -1,4 +1,4 @@
---[ IA Component : Navigator (Déplacement & Pathfinding) ]--
+--[ IA Component : Navigator (Déplacement & Pathfinding AAA) ]--
 local PathfindingService = game:GetService("PathfindingService")
 
 local Navigator = {}
@@ -10,7 +10,14 @@ function Navigator.new(npc)
     self.humanoid = npc:WaitForChild("Humanoid")
     self.root = npc:WaitForChild("HumanoidRootPart")
     
-    self.pathParams = { AgentRadius = 2, AgentHeight = 5, AgentCanJump = true, WaypointSpacing = 4, Costs = { Water = 20 } }
+    -- 🛑 CORRECTION EAU : Le coût de l'eau passe à 100 000 ! L'IA refusera catégoriquement d'y entrer.
+    self.pathParams = { 
+        AgentRadius = 2, 
+        AgentHeight = 5, 
+        AgentCanJump = true, 
+        WaypointSpacing = 4, 
+        Costs = { Water = 100000 } 
+    }
     self.path = PathfindingService:CreatePath(self.pathParams)
     
     self.waypoints = {}
@@ -30,6 +37,7 @@ function Navigator:GetSafeWanderTarget()
         local rx, rz = math.random(-25, 25), math.random(-25, 25)
         local target = self.root.Position + Vector3.new(rx, 50, rz) 
         local ray = workspace:Raycast(target, Vector3.new(0, -100, 0), self.losParams)
+        -- Vérifie qu'il ne choisit pas une destination dans l'eau
         if ray and ray.Material ~= Enum.Material.Water then return ray.Position end
     end
     return self.root.Position 

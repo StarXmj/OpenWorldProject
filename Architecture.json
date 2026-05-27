@@ -1,0 +1,56 @@
+{
+  "Game_Architecture": {
+    "Master_Tick": {
+      "Source": "CoreClock.server.luau",
+      "GlobalEvent": "GlobalTickEvent(deltaTime, inGameDaysPassed, timeScale)",
+      "Configuration": "GameConfig.World.DayLengthSeconds"
+    },
+    "NPC_Attributes": {
+      "Identity": {
+        "Gender": "String ('Male', 'Female')",
+        "Age": "Number (8 to 70)",
+        "Personality": "String ('Coward', 'Aggressive', 'Friendly', 'Neutral')"
+      },
+      "Vital_Stats": {
+        "Hunger": "Number (0 to 100, kills at 0)",
+        "Thirst": "Number (0 to 100, kills at 0)",
+        "Fatigue": "Number (0 to 100, sleeps at 80)",
+        "Stamina": "Number (0 to 100, used for sprinting)"
+      },
+      "RPG_Levels": {
+        "Combat_Level": "Number (Increases damage)",
+        "Resistance_Level": "Number (Reduces damage taken)"
+      },
+      "AI_Memory_Timers": {
+        "AggroTarget": "String (Player Name)",
+        "AggroTime": "Number (os.clock() timestamp)",
+        "FoodDespair": "Number (os.clock(), prevents softlock if no food)",
+        "WaterDespair": "Number (os.clock(), prevents softlock if no water)"
+      },
+      "Admin_Debug_Panel": {
+        "Debug_State": "String (Current State Machine Node)",
+        "Debug_Action": "String (Thought Bubble Text)",
+        "Debug_Priority": "String (LOW, MEDIUM, HIGH, CRITICAL, MAXIMUM)",
+        "Debug_Target": "String (What the NPC is looking at)",
+        "Debug_DangerLevel": "String (LOW, HIGH)",
+        "Debug_Reason": "String (Explanation of the last decision made)"
+      }
+    },
+    "World_Flora_Attributes": {
+      "BerryBush": {
+        "Fruits": "Number (0 to 3, drops to 0 when harvested)",
+        "RegrowthProgress": "Number (Fraction of in-game day passed)"
+      }
+    },
+    "Brain_States_List": [
+      "WANDER", 
+      "REST", 
+      "SOCIALIZE", 
+      "SEEK_FOOD", 
+      "SEEK_WATER", 
+      "SEEK_CAMP", 
+      "COMBAT", 
+      "FLEE"
+    ]
+  }
+}

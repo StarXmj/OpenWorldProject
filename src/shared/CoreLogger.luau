@@ -1,4 +1,4 @@
---[ Système Centralisé de Logs ]--
+--[ Système Centralisé de Logs V2 (Avec Module IA) ]--
 local RunService = game:GetService("RunService")
 local CoreLogger = {}
 
@@ -17,8 +17,14 @@ function CoreLogger.error(system, message)
 end
 
 function CoreLogger.debug(system, message)
-    -- Pratique pour des infos spam (ex: déplacements), qu'on peut désactiver facilement
     print(string.format("⚪ [%s] [%s] : %s", IS_SERVER and "SERVER" or "CLIENT", string.upper(system), message))
+end
+
+-- 🧠 NOUVEAU : Log dédié à l'IA (Format AAA)
+function CoreLogger.ai(npcName, message)
+    if IS_SERVER then
+        print(string.format("🧠 [AI - %s] %s", npcName, message))
+    end
 end
 
 return CoreLogger
