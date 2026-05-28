@@ -56,31 +56,59 @@ function Perception.FindNearest(npc, searchType, maxDist)
     return closest, minDist
 end
 
-function Perception.GetCampSleepPosition(campPosition, npc)
-    -- On augmente le nombre de tentatives et l'espace (pour que 20+ PNJ puissent se coucher)
-    for attempt = 1, 15 do
-        local angle = math.random() * math.pi * 2 
-        local distance = math.random(10, 25) -- 🏕️ Grand cercle autour du feu
-        local offset = Vector3.new(math.cos(angle) * distance, 0, math.sin(angle) * distance)
-        local spot = campPosition + offset
-        
-        local tooClose = false
-        for _, other in ipairs(workspace:GetChildren()) do
-            if other:IsA("Model") and other:FindFirstChild("Humanoid") and other ~= npc then
-                local otherRoot = other:FindFirstChild("HumanoidRootPart")
-                if otherRoot and (Vector3.new(otherRoot.Position.X, 0, otherRoot.Position.Z) - Vector3.new(spot.X, 0, spot.Z)).Magnitude < 4.5 then
-                    tooClose = true
-                    break
-                end
+-- 🏕️ SYSTÈME DE SLOTS DE CAMPEMENT
+function Perception.GetAssignedCampSlot(camp, npc)
+    local maxSlots = 8
+    local slotDistance = 8
+    local assignedSlot = npc:GetAttribute("CampSlot")
+    
+    -- Si le PNJ n'a pas encore de place attribuée, on lui en trouve une libre
+    if not assignedSlot then
+        local usedSlots = {}
+        for _, otherNpc in ipairs(workspace:GetChildren()) do
+            if otherNpc:GetAttribute("Personality") and otherNpc:GetAttribute("CampSlot") then
+                usedSlots[otherNpc:GetAttribute("CampSlot")] = true
             end
         end
-        if not tooClose then return spot end
+        
+        for i = 1, maxSlots do
+            if not usedSlots[i] then
+                assignedSlot = i
+                npc:SetAttribute("CampSlot", i)
+                break
+            end
+        end
+        
+        if not assignedSlot then assignedSlot = math.random(1, maxSlots) end -- Fallback
     end
     
-    -- Fallback très espacé s'il n'y a plus de place
-    local rAngle = math.random() * math.pi * 2
-    local rDist = math.random(26, 35)
-    return campPosition + Vector3.new(math.cos(rAngle) * rDist, 0, math.sin(rAngle) * rDist)
+    local angle = (assignedSlot / maxSlots) * math.pi * 2
+    local campPos = camp:IsA("Model") and camp:GetPivot().Position or camp.Position
+    local offset = Vector3.new(math.cos(angle) * slotDistance, 0, math.sin(angle) * slotDistance)
+    
+    return campPos + offset
+end
+
+-- 💧 SÉCURITÉ EAU : Trouver la rive la plus proche sans nager
+function Perception.GetSafeShoreTarget(npcPos, waterPos)
+    local dir = (npcPos - waterPos).Unit
+    local flatDir = Vector3.new(dir.X, 0, dir.Z).Unit
+    
+    -- On recule la cible de 15 studs en direction du PNJ (vers la terre ferme)
+    local shorePos = waterPos + (flatDir * 15)
+    
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Include
+    params.FilterDescendantsInstances = {workspace.Terrain}
+    
+    -- Vérification : Est-ce bien de la terre/sable et pas de l'eau profonde ?
+    local ray = workspace:Raycast(shorePos + Vector3.new(0, 50, 0), Vector3.new(0, -100, 0), params)
+    if ray and ray.Material ~= Enum.Material.Water then
+        return ray.Position
+    end
+    
+    -- Sécurité supplémentaire : on recule encore plus
+    return waterPos + (flatDir * 25)
 end
 
 return Perception

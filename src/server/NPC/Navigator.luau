@@ -64,64 +64,69 @@ function Navigator:GetDirectionalWanderTarget(distance)
     return self.root.Position
 end
 
-function Navigator:SmartMoveTo(targetPos)
-    if self.isLockedForSleep then return end
-    
+function Navigator:SmartMoveTo(targetPos, intent)
     local now = os.clock()
     
-    -- 🦘 RÉFLEXE D'ESCALADE ADOUCI (Empêche de spammer le saut)
-    if now - self.lastJumpTime > 1.5 then
-        local rayPos = self.root.Position + Vector3.new(0, -1.5, 0)
-        local fwdRay = workspace:Raycast(rayPos, self.root.CFrame.LookVector * 2.5, self.losParams)
-        if fwdRay and fwdRay.Instance.CanCollide and fwdRay.Material ~= Enum.Material.Water then
-            self.humanoid.Jump = true
-            self.lastJumpTime = now
+    -- 🛡️ SYSTÈME ANTI-STUCK (Déblocage intelligent)
+    self.lastPos = self.lastPos or self.root.Position
+    self.lastStuckTime = self.lastStuckTime or now
+    
+    if now - self.lastStuckTime > 1.5 then
+        local distMoved = (self.root.Position - self.lastPos).Magnitude
+        if distMoved < 0.5 then -- Le PNJ n'a presque pas bougé en 1.5s
+            self.stuckFails = (self.stuckFails or 0) + 1
+            if self.stuckFails >= 3 then
+                local CoreLogger = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("CoreLogger"))
+                CoreLogger.ai(self.npc.Name, "Path failed → retrying alternative route")
+                
+                self.pathComputeCooldown = 0 -- Force le recalcul
+                self.stuckFails = 0
+                -- Micro-décalage de la cible pour forcer un nouveau path
+                targetPos = targetPos + Vector3.new(math.random(-10, 10), 0, math.random(-10, 10))
+            end
+        else
+            self.stuckFails = 0 -- Il avance bien
         end
+        self.lastPos = self.root.Position
+        self.lastStuckTime = now
     end
 
-    -- 🧭 RECALCUL INTELLIGENT (Pas de spam de Pathfinding)
+    -- 🧠 CALCUL DU PATHFINDING
     if not self.lastPathTarget or (self.lastPathTarget - targetPos).Magnitude > 5 or now > self.pathComputeCooldown then
         local success, _ = pcall(function() self.path:ComputeAsync(self.root.Position, targetPos) end)
+        
         if success and self.path.Status == Enum.PathStatus.Success then
+            local CoreLogger = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("CoreLogger"))
+            
+            if intent == "Camp" then CoreLogger.ai(self.npc.Name, "Path to camp successful") end
+            if intent == "Water" then CoreLogger.ai(self.npc.Name, "Path adjusted to avoid swimming") end
+            
             self.waypoints = self.path:GetWaypoints()
             self.currentWaypointIndex = 2
-            
-            -- 🚶‍♂️ LISSAGE : On ignore les waypoints trop proches pour éviter les pirouettes
-            while self.waypoints[self.currentWaypointIndex] do
-                local wpPos = self.waypoints[self.currentWaypointIndex].Position
-                local dist = (Vector3.new(wpPos.X, 0, wpPos.Z) - Vector3.new(self.root.Position.X, 0, self.root.Position.Z)).Magnitude
-                if dist < 3.5 then
-                    self.currentWaypointIndex += 1
-                else
-                    break
-                end
-            end
-            
             self.lastPathTarget = targetPos
-            self.pathComputeCooldown = now + 1.5
-            CoreLogger.ai(self.npc.Name, "Path generated successfully. Movement smoothing active.")
-        else
-            CoreLogger.ai(self.npc.Name, "Path blocked → Recalculating fallback logic")
-            self.humanoid:MoveTo(targetPos)
             self.pathComputeCooldown = now + 2
+        else
+            local CoreLogger = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("CoreLogger"))
+            if intent == "Camp" then CoreLogger.ai(self.npc.Name, "Path failed → retrying alternative route") end
+            
+            self.humanoid:MoveTo(targetPos) 
+            self.pathComputeCooldown = now + 1
             return
         end
     end
 
+    -- 🏃 EXÉCUTION DU DÉPLACEMENT
     if self.waypoints and self.currentWaypointIndex <= #self.waypoints then
         local wp = self.waypoints[self.currentWaypointIndex]
         local flatRoot = Vector3.new(self.root.Position.X, 0, self.root.Position.Z)
         local flatWp = Vector3.new(wp.Position.X, 0, wp.Position.Z)
         
-        if (flatRoot - flatWp).Magnitude < 3 then
+        if (flatRoot - flatWp).Magnitude < 4 then
             self.currentWaypointIndex += 1
             if self.currentWaypointIndex <= #self.waypoints then wp = self.waypoints[self.currentWaypointIndex] else return end
         end
 
-        if wp.Action == Enum.PathWaypointAction.Jump and now - self.lastJumpTime > 1.5 then 
-            self.humanoid.Jump = true 
-            self.lastJumpTime = now
-        end
+        if wp.Action == Enum.PathWaypointAction.Jump then self.humanoid.Jump = true end
         self.humanoid:MoveTo(wp.Position)
     else
         self.humanoid:MoveTo(targetPos)
